@@ -43,16 +43,19 @@ class Program
 
         // Get paths of all subdirectories in source folder
         string[] sourceDirectories = Directory.GetDirectories(sourcePath, "*", SearchOption.AllDirectories)
-        .OrderBy(path => Path.GetRelativePath(sourcePath, path).Length)
-        .ToArray();
+            .OrderBy(path => Path.GetRelativePath(sourcePath, path).Length)
+            .ToArray();
 
         // Get paths of all files from source folder
         string[] sourceFiles = Directory.GetFiles(sourcePath, "*", SearchOption.AllDirectories);
+        
+        var sourceDirectorySet = new HashSet<string>();
 
         // Create missing source folders in backup folder
         foreach (string sourceDirectory in sourceDirectories)
         {
             string relativePath = Path.GetRelativePath(sourcePath, sourceDirectory);
+            sourceDirectorySet.Add(relativePath);
             string backupDirectory = Path.Combine(backupPath, relativePath);
            
             if (File.Exists(backupDirectory))
@@ -66,10 +69,13 @@ class Program
             }
         }
 
+        var sourceFileSet = new HashSet<string>();
+
         // Copy the files
         foreach(string sourceFile in sourceFiles)
         {
             string relativePath = Path.GetRelativePath(sourcePath, sourceFile);
+            sourceFileSet.Add(relativePath);
             string backupFile = Path.Combine(backupPath, relativePath);
 
             bool existed = File.Exists(backupFile);
@@ -79,6 +85,29 @@ class Program
             }
 
             File.Copy(sourceFile, backupFile, true);
+        }
+
+        // Remove non source files from backup folder
+        foreach (string backupFile in Directory.GetFiles(backupPath, "*", SearchOption.AllDirectories))
+        {
+            string relativePath = Path.GetRelativePath(backupPath, backupFile);
+            if (!sourceFileSet.Contains(relativePath))
+            {
+                File.Delete(backupFile);
+            }
+        }
+
+        // Remove non source directories from backup folder
+        string[] backupDirectories = Directory.GetDirectories(backupPath, "*", SearchOption.AllDirectories)
+            .OrderByDescending(path => path.Length)
+            .ToArray();
+        foreach (string backupDirectory in backupDirectories)
+        {
+            string relativePath = Path.GetRelativePath(backupPath, backupDirectory);
+            if (!sourceDirectorySet.Contains(relativePath))
+            {
+                Directory.Delete(backupDirectory);
+            }
         }
     }
 
