@@ -12,9 +12,9 @@ class Program
             return 2;
         }
 
-        string sourceFolder = args[0];
-        string backupFolder = args[1];
-        string logFilePath = args[3];
+        string sourceFolder = Path.GetFullPath(args[0]);
+        string backupFolder = Path.GetFullPath(args[1]);
+        string logFilePath = Path.GetFullPath(args[3]);
 
         // Check if source folder exists
         if (!Directory.Exists(sourceFolder))
@@ -30,15 +30,40 @@ class Program
             return 3;
         }
 
-        Synchronize(sourceFolder, backupFolder);
+        string? logDirectory = Path.GetDirectoryName(logFilePath);
+        if (!string.IsNullOrEmpty(logDirectory))
+        {
+            Directory.CreateDirectory(logDirectory);
+        }
+
+        using var writer = new StreamWriter(new FileStream(logFilePath, FileMode.Append, FileAccess.Write, FileShare.Read));
+        void Log(string message)
+        {
+            string entry = $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} {message}";
+            Console.WriteLine(entry);
+            writer.WriteLine(entry);
+            writer.Flush();
+        }
+
+        Log($"Synchronization started: {sourceFolder} -> {backupFolder}");
+        try
+        {
+            Synchronize(sourceFolder, backupFolder, Log);
+        }
+        catch (Exception exception)
+        {
+            Log($"Synhronization failed: {exception.Message}");
+        }
+
         return 0;
     }
 
-    static void Synchronize(string sourcePath, string backupPath)
+    static void Synchronize(string sourcePath, string backupPath, Action<string> log)
     {
         if (!Directory.Exists(backupPath))
         {
             Directory.CreateDirectory(backupPath);
+            log($"Created directory: {backupPath}");
         }
 
         // Get paths of all subdirectories in source folder
@@ -48,7 +73,7 @@ class Program
 
         // Get paths of all files from source folder
         string[] sourceFiles = Directory.GetFiles(sourcePath, "*", SearchOption.AllDirectories);
-        
+
         var sourceDirectorySet = new HashSet<string>();
 
         // Create missing source folders in backup folder
@@ -57,26 +82,33 @@ class Program
             string relativePath = Path.GetRelativePath(sourcePath, sourceDirectory);
             sourceDirectorySet.Add(relativePath);
             string backupDirectory = Path.Combine(backupPath, relativePath);
-           
+
             if (File.Exists(backupDirectory))
             {
                 File.Delete(backupDirectory);
+                log($"Removed file: {backupDirectory}");
             }
 
             if (!Directory.Exists(backupDirectory))
             {
                 Directory.CreateDirectory(backupDirectory);
+                log($"Created directory: {backupDirectory}");
             }
         }
 
         var sourceFileSet = new HashSet<string>();
 
         // Copy the files
-        foreach(string sourceFile in sourceFiles)
+        foreach (string sourceFile in sourceFiles)
         {
             string relativePath = Path.GetRelativePath(sourcePath, sourceFile);
             sourceFileSet.Add(relativePath);
             string backupFile = Path.Combine(backupPath, relativePath);
+
+            if (Directory.Exists(backupFile))
+            {
+                RemoveDirectory(backupFile, log);
+            }
 
             bool existed = File.Exists(backupFile);
             if (existed && FilesAreEqual(backupFile, sourceFile))
@@ -85,6 +117,7 @@ class Program
             }
 
             File.Copy(sourceFile, backupFile, true);
+            log($"{(existed ? "Copied" : "Created")} file: {backupFile}");
         }
 
         // Remove non source files from backup folder
@@ -94,6 +127,7 @@ class Program
             if (!sourceFileSet.Contains(relativePath))
             {
                 File.Delete(backupFile);
+                log($"Removed file: {backupFile}");
             }
         }
 
@@ -107,8 +141,26 @@ class Program
             if (!sourceDirectorySet.Contains(relativePath))
             {
                 Directory.Delete(backupDirectory);
+                log($"Removed directory: {backupDirectory}");
             }
         }
+    }
+
+    private static void RemoveDirectory(string directoryPath, Action<string> log)
+    {
+        foreach (string file in Directory.GetFiles(directoryPath))
+        {
+            File.Delete(file);
+            log($"Removed file: {file}");
+        }
+
+        foreach (string directory in Directory.GetDirectories(directoryPath))
+        {
+            RemoveDirectory(directory, log);
+        }
+
+        Directory.Delete(directoryPath);
+        log($"Removed directory: {directoryPath}");
     }
 
     private static bool FilesAreEqual(string firstPath, string secondPath)
