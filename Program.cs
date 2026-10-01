@@ -4,7 +4,7 @@ namespace FolderSynchronization;
 
 class Program
 {
-    static int Main(string[] args)
+    static async Task<int> Main(string[] args)
     {
         if (args.Length != 4 || !int.TryParse(args[2], out int syncInterval) || syncInterval <= 0)
         {
@@ -45,6 +45,13 @@ class Program
             writer.Flush();
         }
 
+        using var cancellation = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, eventArgs) =>
+        {
+            eventArgs.Cancel = true;
+            cancellation.Cancel();
+        };
+
         Log($"Synchronization started: {sourceFolder} -> {backupFolder}");
         try
         {
@@ -53,6 +60,26 @@ class Program
         catch (Exception exception)
         {
             Log($"Synhronization failed: {exception.Message}");
+        }
+
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(syncInterval));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellation.Token))
+            {
+                try
+                {
+                    Synchronize(sourceFolder, backupFolder, Log);
+                }
+                catch (Exception exception)
+                {
+                    Log($"Synchronization failed: {exception.Message}");
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            Log("Synchronization stopped.");
         }
 
         return 0;
