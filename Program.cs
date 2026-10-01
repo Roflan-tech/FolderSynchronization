@@ -23,10 +23,23 @@ class Program
             return 3;
         }
 
-        // Check if source folder is different from backup one
-        if (sourceFolder == backupFolder)
+        // Check if source folder path is different from backup one
+        if (sourceFolder.Equals(backupFolder, StringComparison.OrdinalIgnoreCase))
         {
-            Console.Error.WriteLine($"Source folder {sourceFolder} and backup folder {backupFolder} are identical");
+            Console.Error.WriteLine("Source and backup folders cannot be the same.");
+            return 3;
+        }
+
+        // Check the folders are not inside one another
+        if (backupFolder.StartsWith(sourceFolder + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        {
+            Console.Error.WriteLine("Backup folder cannot be inside the source folder.");
+            return 3;
+        }
+
+        if (sourceFolder.StartsWith(backupFolder + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        {
+            Console.Error.WriteLine("Source folder cannot be inside the backup folder.");
             return 3;
         }
 
